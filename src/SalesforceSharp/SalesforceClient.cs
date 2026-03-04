@@ -77,7 +77,7 @@ namespace SalesforceSharp
         /// The instance URL.
         /// </value>
         public string InstanceUrl { get; private set; }
-        
+
         /// <summary>
         /// Get current API calls number
         /// </summary>
@@ -85,7 +85,7 @@ namespace SalesforceSharp
         /// current API calls number
         /// </value>        
         public int ApiCallsUsed { get; private set; }
-        
+
         /// <summary>
         /// Get total API calls limit
         /// </summary>
@@ -129,7 +129,7 @@ namespace SalesforceSharp
         /// <returns>The API result for the query.</returns>
         public IList<T> QueryActionBatch<T>(string query, Action<IList<T>> action, string altUrl = "") where T : new()
         {
-            if (action == null) throw new ArgumentNullException(nameof (action));
+            if (action == null) throw new ArgumentNullException(nameof(action));
 
             ExceptionHelper.ThrowIfNullOrEmpty("query", query);
 
@@ -164,9 +164,9 @@ namespace SalesforceSharp
                     action(customResponse.Records);
                     returns.AddRange(customResponse.Records);
                 }
-                catch (Exception ex)
+                catch
                 {
-                    throw ex;
+                    throw;
                 }
 
 
@@ -201,7 +201,7 @@ namespace SalesforceSharp
             ExceptionHelper.ThrowIfNullOrEmpty("recordId", recordId);
             ExceptionHelper.ThrowIfNullOrEmpty("altUrl", altUrl);
 
-            var result = Query<T>("SELECT {0} FROM {1} WHERE Id = '{2}'".With(GetRecordProjection(typeof(T)), objectName, recordId), altUrl);
+            var result = Query<T>("SELECT {0} FROM {1} WHERE Id = '{2}'".With(GetRecordProjection(typeof(T)), objectName, SanitizeSoqlId(recordId)), altUrl);
 
             return result.FirstOrDefault();
         }
@@ -218,7 +218,7 @@ namespace SalesforceSharp
             ExceptionHelper.ThrowIfNullOrEmpty("objectName", objectName);
             ExceptionHelper.ThrowIfNullOrEmpty("recordId", recordId);
 
-            var result = Query<T>("SELECT {0} FROM {1} WHERE Id = '{2}'".With(GetRecordProjection(typeof(T)), objectName, recordId));
+            var result = Query<T>("SELECT {0} FROM {1} WHERE Id = '{2}'".With(GetRecordProjection(typeof(T)), objectName, SanitizeSoqlId(recordId)));
 
             return result.FirstOrDefault();
         }
@@ -541,7 +541,7 @@ namespace SalesforceSharp
                 throw ex;
             }
         }
-        
+
         private void ExtractLimitsInfo(IRestResponse response)
         {
             var limitHeader = response.Headers?.FirstOrDefault(h => h.Name == "Sforce-Limit-Info");
@@ -570,7 +570,7 @@ namespace SalesforceSharp
             var props = recordType.GetProperties();
             foreach (var prop in props)
             {
-                var sfAttrs = prop.GetCustomAttributes(typeof (SalesforceAttribute), true);
+                var sfAttrs = prop.GetCustomAttributes(typeof(SalesforceAttribute), true);
                 // If Ignore then we shouldn't include it.
                 if (sfAttrs.Any())
                 {
@@ -593,6 +593,37 @@ namespace SalesforceSharp
             }
 
             return String.Join(", ", propNames);
+        }
+
+        /// <summary>
+        /// Validates and sanitizes a Salesforce record ID before use in a SOQL query.
+        /// Applies two independent layers of defence against SOQL injection:
+        ///   1. Allowlist validation — rejects any value that is not exactly 15 or 18
+        ///      alphanumeric characters, which is the only legal Salesforce ID format.
+        ///   2. Single-quote escaping — replaces any residual single quotes with the SOQL
+        ///      escape sequence (\') as a defence-in-depth measure. Under the current regex
+        ///      this branch is unreachable for valid input, but it provides a safety net
+        ///      against any future bypass technique that circumvents the allowlist.
+        /// </summary>
+        /// <param name="recordId">The record ID to validate and sanitize.</param>
+        /// <returns>The sanitized record ID, safe for interpolation into a SOQL string literal.</returns>
+        /// <exception cref="ArgumentException">Thrown when the record ID does not match the expected Salesforce ID format.</exception>
+        private static readonly Regex s_salesforceIdRegex = new Regex(@"^[a-zA-Z0-9]{15}([a-zA-Z0-9]{3})?$", RegexOptions.Compiled);
+
+        private static string SanitizeSoqlId(string recordId)
+        {
+            if (!s_salesforceIdRegex.IsMatch(recordId))
+            {
+                throw new ArgumentException(
+                    "The recordId contains invalid characters or is not a valid Salesforce ID format. " +
+                    "A Salesforce ID must be exactly 15 or 18 alphanumeric characters.",
+                    "recordId");
+            }
+
+            // Defence-in-depth: escape single quotes per SOQL convention so that even if a
+            // future bypass technique were to pass the regex above, the value cannot break
+            // out of the enclosing string literal in the query.
+            return recordId.Replace("'", "\\'");
         }
 
         /// <summary>

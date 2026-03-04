@@ -218,6 +218,32 @@ namespace SalesforceSharp.UnitTests
         }
 
         [Test]
+        public void FindById_InjectionAttemptInRecordId_ArgumentException()
+        {
+            // Ensure a SOQL-injection payload in recordId is rejected before any HTTP call is made.
+            // e.g., the payload used in the HackerOne report: ' OR '1'='1
+            var target = new SalesforceClient();
+
+            ExceptionAssert.IsThrowing(new ArgumentException("recordId"), () =>
+            {
+                target.FindById<Exception>("CSU_Attendee__c", "' OR '1'='1");
+            });
+        }
+
+        [Test]
+        public void FindById_ValidSalesforceId_NoInjectionException()
+        {
+            // A well-formed 18-char Salesforce ID must pass the sanitisation guard and
+            // reach the HTTP layer (which will throw because the client is not authenticated).
+            var target = new SalesforceClient();
+
+            ExceptionAssert.IsThrowing(new InvalidOperationException("Please, execute Authenticate method before call any REST API operation."), () =>
+            {
+                target.FindById<Exception>("CSU_Attendee__c", "a0B5e00000KzQdEAL");
+            });
+        }
+
+        [Test]
         public void FindById_ErrorReceived_Exception()
         {
             var target = CreateClientWithResponseError<SalesforceQueryResult<Exception>>();
@@ -344,7 +370,7 @@ namespace SalesforceSharp.UnitTests
             var restClient = MockRepository.GenerateMock<IRestClient>();
             restClient.Expect(r => r.BaseUrl).SetPropertyWithArgument(new Uri("http://tokenUrl"));
             restClient.Expect(r => r.Execute<object>(null)).IgnoreArguments().Return(response);
-            restClient.Expect(r => r.Execute(null)).IgnoreArguments ().Return (response);
+            restClient.Expect(r => r.Execute(null)).IgnoreArguments().Return(response);
 
             var flow = MockRepository.GenerateMock<IAuthenticationFlow>();
             flow.Expect(f => f.Authenticate()).Return(new AuthenticationInfo("access", "http://url"));
@@ -408,8 +434,8 @@ namespace SalesforceSharp.UnitTests
 
             var restClient = MockRepository.GenerateMock<IRestClient>();
             restClient.Expect(r => r.BaseUrl).SetPropertyWithArgument(new Uri("http://tokenUrl"));
-            restClient.Expect (r => r.Execute(null)).IgnoreArguments ().Return (response);
-            restClient.Expect (r => r.Execute<T>(null)).IgnoreArguments().Return(response);
+            restClient.Expect(r => r.Execute(null)).IgnoreArguments().Return(response);
+            restClient.Expect(r => r.Execute<T>(null)).IgnoreArguments().Return(response);
 
             var flow = MockRepository.GenerateMock<IAuthenticationFlow>();
             flow.Expect(f => f.Authenticate()).Return(new AuthenticationInfo("access", "http://url"));
@@ -429,8 +455,8 @@ namespace SalesforceSharp.UnitTests
             response.Expect(r => r.Data).Return(data);
 
             var restClient = MockRepository.GenerateMock<IRestClient>();
-            restClient.Expect (r => r.Execute(null)).IgnoreArguments().Return(response);
-            restClient.Expect (r => r.Execute<T>(null)).IgnoreArguments ().Return (response);
+            restClient.Expect(r => r.Execute(null)).IgnoreArguments().Return(response);
+            restClient.Expect(r => r.Execute<T>(null)).IgnoreArguments().Return(response);
 
 
             var flow = MockRepository.GenerateMock<IAuthenticationFlow>();
@@ -452,8 +478,8 @@ namespace SalesforceSharp.UnitTests
 
             var restClient = MockRepository.GenerateMock<IRestClient>();
             restClient.Expect(r => r.BaseUrl = new Uri(string.Format("http://url{0}/TESTE", AltUrl))).IgnoreArguments().Do(recordUrl);
-            restClient.Expect (r => r.Execute(null)).IgnoreArguments().Return(response);
-            restClient.Expect (r => r.Execute<T>(null)).IgnoreArguments ().Return (response);
+            restClient.Expect(r => r.Execute(null)).IgnoreArguments().Return(response);
+            restClient.Expect(r => r.Execute<T>(null)).IgnoreArguments().Return(response);
 
             var flow = MockRepository.GenerateMock<IAuthenticationFlow>();
             flow.Expect(f => f.Authenticate()).Return(new AuthenticationInfo("access", "http://url"));
