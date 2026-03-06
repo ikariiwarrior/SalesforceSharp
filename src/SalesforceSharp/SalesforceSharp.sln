@@ -1,0 +1,24 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SalesforceSharp", "SalesforceSharp.csproj", "{8DCB2F52-B0DF-B0C4-0AB9-5163F1A0476D}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{8DCB2F52-B0DF-B0C4-0AB9-5163F1A0476D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8DCB2F52-B0DF-B0C4-0AB9-5163F1A0476D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8DCB2F52-B0DF-B0C4-0AB9-5163F1A0476D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8DCB2F52-B0DF-B0C4-0AB9-5163F1A0476D}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {3013370B-5CCE-4EE5-AEA9-12D82E93BD4E}
+	EndGlobalSection
+EndGlobal

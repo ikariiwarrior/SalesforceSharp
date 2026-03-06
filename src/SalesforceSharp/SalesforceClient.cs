@@ -3,13 +3,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Text.RegularExpressions;
-using HelperSharp;
 using Newtonsoft.Json.Linq;
-using RestSharp;
+using SalesforceSharp.Common;
+using SalesforceSharp.Common.Http;
 using SalesforceSharp.Models;
 using SalesforceSharp.Security;
 using SalesforceSharp.Serialization;
-using RestSharp.Extensions;
 
 namespace SalesforceSharp
 {
@@ -21,7 +20,7 @@ namespace SalesforceSharp
         #region Fields
         private string m_accessToken;
         private DynamicJsonDeserializer m_deserializer;
-        private IRestClient m_restClient;
+        private ISalesforceHttpClient m_httpClient;
         private GenericJsonDeserializer genericJsonDeserializer;
         private GenericJsonSerializer updateJsonSerializer;
         private static readonly Regex apiUsageRegexp = new Regex(@"api-usage=(\d+)/(\d+)", RegexOptions.Compiled);
@@ -32,17 +31,17 @@ namespace SalesforceSharp
         /// Initializes a new instance of the <see cref="SalesforceClient"/> class.
         /// </summary>
         public SalesforceClient()
-            : this(new RestClient())
+            : this(new SalesforceHttpClient())
         {
         }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="SalesforceClient"/> class.
         /// </summary>
-        /// <param name="restClient">The rest client.</param>
-        protected internal SalesforceClient(IRestClient restClient)
+        /// <param name="httpClient">The HTTP client.</param>
+        protected internal SalesforceClient(ISalesforceHttpClient httpClient)
         {
-            m_restClient = restClient;
+            m_httpClient = httpClient;
             ApiVersion = "v28.0";
             m_deserializer = new DynamicJsonDeserializer();
             genericJsonDeserializer = new GenericJsonDeserializer(new SalesforceContractResolver(false));
@@ -119,7 +118,6 @@ namespace SalesforceSharp
             return QueryActionBatch<T>(query, s => { }, altUrl);
         }
 
-
         /// <summary>
         /// Executes a SOQL query and returns the result.
         /// </summary>
@@ -138,7 +136,7 @@ namespace SalesforceSharp
             var url = "{0}?q={1}".With(string.IsNullOrEmpty(altUrl) ? GetUrl("query") : GetAltUrl(altUrl), escapedQuery);
 
             var returns = new List<T>();
-            IRestResponse<SalesforceQueryResult<T>> response = null;
+            IHttpResponse<SalesforceQueryResult<T>> response = null;
 
             do
             {
@@ -159,7 +157,7 @@ namespace SalesforceSharp
                 if (!response.Data.Records.Any()) continue;
                 try
                 {
-                    var customResponse = genericJsonDeserializer.Deserialize<SalesforceQueryResult<T>>(response);
+                    var customResponse = genericJsonDeserializer.Deserialize<SalesforceQueryResult<T>>(response.Content);
                     if (customResponse == null) continue;
                     action(customResponse.Records);
                     returns.AddRange(customResponse.Records);
@@ -169,14 +167,12 @@ namespace SalesforceSharp
                     throw;
                 }
 
-
             } while (response != null && response.Data != null && !response.Data.Done && !string.IsNullOrEmpty(response.Data.NextRecordsUrl));
 
             return returns;
         }
 
-
-        private string GetNextRecordsUrl<T>(IRestResponse<SalesforceQueryResult<T>> previousResponse) where T : new()
+        private string GetNextRecordsUrl<T>(IHttpResponse<SalesforceQueryResult<T>> previousResponse) where T : new()
         {
             if (previousResponse == null || previousResponse.Data == null ||
                 string.IsNullOrEmpty(previousResponse.Data.NextRecordsUrl))
@@ -184,7 +180,6 @@ namespace SalesforceSharp
                 return string.Empty;
             }
             return InstanceUrl + previousResponse.Data.NextRecordsUrl;
-
         }
 
         /// <summary>
@@ -224,7 +219,7 @@ namespace SalesforceSharp
         }
 
         /// <summary>
-        /// Obtains a JSON representation of fields an meta data for a given object type
+        /// Obtains a JSON representation of fields and meta data for a given object type.
         /// </summary>
         /// <param name="objectName">The name of the object in Salesforce.</param>
         /// <returns></returns>
@@ -232,13 +227,13 @@ namespace SalesforceSharp
         {
             ExceptionHelper.ThrowIfNullOrEmpty("objectName", objectName);
 
-            var response = Request<object>(GetUrl("sobjects"), string.Format("{0}/describe/", objectName));
+            var response = Request<object>(GetUrl("sobjects"), "{0}/describe/".With(objectName));
 
             return response.Content;
         }
 
         /// <summary>
-        /// Creates a record
+        /// Creates a record.
         /// </summary>
         /// <param name="objectName">The name of the object in Salesforce.</param>
         /// <param name="record">The record to be created.</param>
@@ -250,8 +245,8 @@ namespace SalesforceSharp
             ExceptionHelper.ThrowIfNull("record", record);
             ExceptionHelper.ThrowIfNullOrEmpty("altUrl", altUrl);
 
-            var response = Request<object>(GetAltUrl(altUrl), objectName, record, Method.POST);
-            return m_deserializer.Deserialize<dynamic>(response).id.Value;
+            var response = Request<object>(GetAltUrl(altUrl), objectName, record, HttpVerb.POST);
+            return m_deserializer.Deserialize<dynamic>(response.Content).id.Value;
         }
 
         /// <summary>
@@ -265,8 +260,8 @@ namespace SalesforceSharp
             ExceptionHelper.ThrowIfNullOrEmpty("objectName", objectName);
             ExceptionHelper.ThrowIfNull("record", record);
 
-            var response = Request<object>(GetUrl("sobjects"), objectName, record, Method.POST);
-            return m_deserializer.Deserialize<dynamic>(response).id.Value;
+            var response = Request<object>(GetUrl("sobjects"), objectName, record, HttpVerb.POST);
+            return m_deserializer.Deserialize<dynamic>(response.Content).id.Value;
         }
 
         /// <summary>
@@ -281,12 +276,10 @@ namespace SalesforceSharp
             ExceptionHelper.ThrowIfNullOrEmpty("recordId", recordId);
             ExceptionHelper.ThrowIfNull("record", record);
 
-            var response = RequestRaw(GetUrl("sobjects"), "{0}/{1}".With(objectName, recordId), record, Method.PATCH);
+            var response = RequestRaw(GetUrl("sobjects"), "{0}/{1}".With(objectName, recordId), record, HttpVerb.PATCH);
 
             // HTTP status code 204 is returned if an existing record is updated.
-            var recordUpdated = response.StatusCode == HttpStatusCode.NoContent;
-
-            return recordUpdated;
+            return response.StatusCode == HttpStatusCode.NoContent;
         }
 
         /// <summary>
@@ -303,12 +296,10 @@ namespace SalesforceSharp
             ExceptionHelper.ThrowIfNull("record", record);
             ExceptionHelper.ThrowIfNullOrEmpty("altUrl", altUrl);
 
-            var response = RequestRaw(GetAltUrl(altUrl), "{0}/{1}".With(objectName, recordId), record, Method.PATCH);
+            var response = RequestRaw(GetAltUrl(altUrl), "{0}/{1}".With(objectName, recordId), record, HttpVerb.PATCH);
 
             // HTTP status code 204 is returned if an existing record is updated.
-            var recordUpdated = response.StatusCode == HttpStatusCode.NoContent;
-
-            return recordUpdated;
+            return response.StatusCode == HttpStatusCode.NoContent;
         }
 
         /// <summary>
@@ -324,12 +315,10 @@ namespace SalesforceSharp
             ExceptionHelper.ThrowIfNullOrEmpty("recordId", recordId);
             ExceptionHelper.ThrowIfNullOrEmpty("altUrl", altUrl);
 
-            var response = Request<object>(GetAltUrl(altUrl), "{0}/{1}".With(objectName, recordId), null, Method.DELETE);
+            var response = Request<object>(GetAltUrl(altUrl), "{0}/{1}".With(objectName, recordId), null, HttpVerb.DELETE);
 
             // HTTP status code 204 is returned if an existing record is deleted.
-            var recoredDeleted = response.StatusCode == HttpStatusCode.NoContent;
-
-            return recoredDeleted;
+            return response.StatusCode == HttpStatusCode.NoContent;
         }
 
         /// <summary>
@@ -343,12 +332,10 @@ namespace SalesforceSharp
             ExceptionHelper.ThrowIfNullOrEmpty("objectName", objectName);
             ExceptionHelper.ThrowIfNullOrEmpty("recordId", recordId);
 
-            var response = Request<object>(GetUrl("sobjects"), "{0}/{1}".With(objectName, recordId), null, Method.DELETE);
+            var response = Request<object>(GetUrl("sobjects"), "{0}/{1}".With(objectName, recordId), null, HttpVerb.DELETE);
 
             // HTTP status code 204 is returned if an existing record is deleted.
-            var recoredDeleted = response.StatusCode == HttpStatusCode.NoContent;
-
-            return recoredDeleted;
+            return response.StatusCode == HttpStatusCode.NoContent;
         }
 
         /// <summary>
@@ -366,7 +353,7 @@ namespace SalesforceSharp
         }
 
         /// <summary>
-        /// Returns the raw content of a GET request to the given object
+        /// Returns the raw content of a GET request to the given object.
         /// </summary>
         /// <param name="objectName">The object name</param>
         /// <param name="recordId">The record id</param>
@@ -384,7 +371,7 @@ namespace SalesforceSharp
         }
 
         /// <summary>
-        /// Returns the raw content of a GET request to the given object
+        /// Returns the raw content of a GET request to the given object.
         /// </summary>
         /// <param name="objectName">The object name</param>
         /// <param name="recordId">The record id</param>
@@ -400,7 +387,7 @@ namespace SalesforceSharp
         }
 
         /// <summary>
-        /// Returns the raw byte array of a GET request to the given object
+        /// Returns the raw byte array of a GET request to the given object.
         /// </summary>
         /// <param name="objectName">The object name</param>
         /// <param name="recordId">The record id</param>
@@ -418,7 +405,7 @@ namespace SalesforceSharp
         }
 
         /// <summary>
-        /// Returns the raw byte array of a GET request to the given object
+        /// Returns the raw byte array of a GET request to the given object.
         /// </summary>
         /// <param name="objectName">The object name</param>
         /// <param name="recordId">The record id</param>
@@ -432,52 +419,53 @@ namespace SalesforceSharp
 
             return response.RawBytes;
         }
-
         #endregion
 
         #region Requests
         /// <summary>
-        /// Perform the request against Salesforce's REST API.
+        /// Performs a typed request against Salesforce's REST API.
         /// </summary>
         /// <typeparam name="T">The return type.</typeparam>
         /// <param name="baseUrl">The base URL.</param>
-        /// <param name="objectName">The Name of the object.</param>
-        /// <param name="record">The record.</param>
-        /// <param name="method">The http method.</param>
+        /// <param name="objectName">The name of the object (appended to the base URL).</param>
+        /// <param name="record">The record to serialize as the request body.</param>
+        /// <param name="method">The HTTP verb.</param>
         /// <exception cref="System.InvalidOperationException">Please, execute Authenticate method before call any REST API operation.</exception>
-        protected IRestResponse<T> Request<T>(string baseUrl, string objectName = null, object record = null, Method method = Method.GET) where T : new()
+        protected IHttpResponse<T> Request<T>(string baseUrl, string objectName = null, object record = null, HttpVerb method = HttpVerb.GET) where T : new()
         {
             if (!IsAuthenticated)
             {
                 throw new InvalidOperationException("Please, execute Authenticate method before call any REST API operation.");
             }
 
-            var request = BuildRequest(baseUrl, objectName, record, method);
+            var url      = BuildUrl(baseUrl, objectName);
+            var jsonBody = record != null ? updateJsonSerializer.Serialize(record) : null;
 
-            var response = m_restClient.Execute<T>(request);
+            var response = m_httpClient.Execute<T>(url, method, m_accessToken, jsonBody);
             CheckApiException(response);
 
             return response;
         }
 
         /// <summary>
-        /// Perform the request against Salesforce's REST API.
+        /// Performs a raw (un-deserialized) request against Salesforce's REST API.
         /// </summary>
         /// <param name="baseUrl">The base URL.</param>
-        /// <param name="objectName">The Name of the object.</param>
-        /// <param name="record">The record.</param>
-        /// <param name="method">The http method.</param>
+        /// <param name="objectName">The name of the object (appended to the base URL).</param>
+        /// <param name="record">The record to serialize as the request body.</param>
+        /// <param name="method">The HTTP verb.</param>
         /// <exception cref="System.InvalidOperationException">Please, execute Authenticate method before call any REST API operation.</exception>
-        protected IRestResponse RequestRaw(string baseUrl, string objectName = null, object record = null, Method method = Method.GET)
+        protected IHttpResponse RequestRaw(string baseUrl, string objectName = null, object record = null, HttpVerb method = HttpVerb.GET)
         {
             if (!IsAuthenticated)
             {
                 throw new InvalidOperationException("Please, execute Authenticate method before call any REST API operation.");
             }
 
-            var request = BuildRequest(baseUrl, objectName, record, method);
+            var url      = BuildUrl(baseUrl, objectName);
+            var jsonBody = record != null ? updateJsonSerializer.Serialize(record) : null;
 
-            var response = m_restClient.Execute(request);
+            var response = m_httpClient.Execute(url, method, m_accessToken, jsonBody);
             CheckApiException(response);
             ExtractLimitsInfo(response);
 
@@ -485,44 +473,30 @@ namespace SalesforceSharp
         }
 
         /// <summary>
-        /// Builds a rest request
+        /// Constructs the full request URL from a base URL and an optional object-name segment.
         /// </summary>
-        /// <param name="baseUrl">The base URL.</param>
-        /// <param name="objectName">The Name of the object.</param>
-        /// <param name="record">The record.</param>
-        /// <param name="method">The http method.</param>
-        /// <returns>A rest request object</returns>
-        private RestRequest BuildRequest(string baseUrl, string objectName, object record, Method method)
+        private static string BuildUrl(string baseUrl, string objectName)
         {
-            Uri uri = new Uri(baseUrl);
-            m_restClient.BaseUrl = uri;
-            var request = new RestRequest(objectName)
+            if (string.IsNullOrEmpty(objectName))
             {
-                RequestFormat = DataFormat.Json,
-                Method = method
-            };
-            request.AddHeader("Authorization", "Bearer " + m_accessToken);
-
-            if (record != null)
-            {
-                request.AddParameter("application/json; charset=utf-8", updateJsonSerializer.Serialize(record), ParameterType.RequestBody);
+                return baseUrl;
             }
-            return request;
+
+            return baseUrl.TrimEnd('/') + "/" + objectName.TrimStart('/');
         }
 
         /// <summary>
-        /// Checks if an API exception was throw in the response.
+        /// Checks if an API exception was thrown in the response.
         /// </summary>
         /// <param name="response">The response.</param>
-        /// <exception cref="SalesforceException">
-        /// </exception>
-        private void CheckApiException(IRestResponse response)
+        /// <exception cref="SalesforceException"></exception>
+        private void CheckApiException(IHttpResponse response)
         {
             if ((int)response.StatusCode > 299)
             {
-                var responseData = m_deserializer.Deserialize<dynamic>(response);
+                var responseData = m_deserializer.Deserialize<dynamic>(response.Content);
 
-                var error = responseData[0];
+                var error       = responseData[0];
                 var fieldsArray = error.fields as JArray;
 
                 if (fieldsArray == null)
@@ -537,20 +511,20 @@ namespace SalesforceSharp
 
             if (response.ErrorException != null)
             {
-                var ex = new FormatException(string.Format("{0}{1}{2}", response.ErrorException.Message, Environment.NewLine, response.Content));
-                throw ex;
+                throw new FormatException(
+                    "{0}{1}{2}".With(response.ErrorException.Message, Environment.NewLine, response.Content));
             }
         }
 
-        private void ExtractLimitsInfo(IRestResponse response)
+        private void ExtractLimitsInfo(IHttpResponse response)
         {
-            var limitHeader = response.Headers?.FirstOrDefault(h => h.Name == "Sforce-Limit-Info");
-            if (limitHeader?.Value != null)
+            var limitHeader = response.GetHeader("Sforce-Limit-Info");
+            if (limitHeader != null)
             {
-                var match = apiUsageRegexp.Match(limitHeader.Value.ToString());
+                var match = apiUsageRegexp.Match(limitHeader);
                 if (match.Success)
                 {
-                    ApiCallsUsed = int.Parse(match.Groups[1].Value);
+                    ApiCallsUsed  = int.Parse(match.Groups[1].Value);
                     ApiCallsLimit = int.Parse(match.Groups[2].Value);
                 }
             }
@@ -595,6 +569,8 @@ namespace SalesforceSharp
             return String.Join(", ", propNames);
         }
 
+        private static readonly Regex s_salesforceIdRegex = new Regex(@"^[a-zA-Z0-9]{15}([a-zA-Z0-9]{3})?$", RegexOptions.Compiled);
+
         /// <summary>
         /// Validates and sanitizes a Salesforce record ID before use in a SOQL query.
         /// Applies two independent layers of defence against SOQL injection:
@@ -608,8 +584,6 @@ namespace SalesforceSharp
         /// <param name="recordId">The record ID to validate and sanitize.</param>
         /// <returns>The sanitized record ID, safe for interpolation into a SOQL string literal.</returns>
         /// <exception cref="ArgumentException">Thrown when the record ID does not match the expected Salesforce ID format.</exception>
-        private static readonly Regex s_salesforceIdRegex = new Regex(@"^[a-zA-Z0-9]{15}([a-zA-Z0-9]{3})?$", RegexOptions.Compiled);
-
         private static string SanitizeSoqlId(string recordId)
         {
             if (!s_salesforceIdRegex.IsMatch(recordId))
@@ -637,7 +611,7 @@ namespace SalesforceSharp
         }
 
         /// <summary>
-        /// Gets URL of use with custom restful endpoint.
+        /// Gets URL for use with a custom RESTful endpoint.
         /// </summary>
         /// <param name="url">URL of alternate service</param>
         /// <returns></returns>

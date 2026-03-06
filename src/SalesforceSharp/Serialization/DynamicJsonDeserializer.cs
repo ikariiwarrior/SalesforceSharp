@@ -1,44 +1,22 @@
-﻿using Newtonsoft.Json;
-using RestSharp;
-using RestSharp.Deserializers;
+﻿﻿using Newtonsoft.Json;
 
 namespace SalesforceSharp.Serialization
 {
     /// <summary>
-    /// Json Deserializar using dynamic.
-    /// <remarks>
-    /// Original source code from http://www.csharpcity.com/2013/deserializing-to-dynamic-with-restsharp/.
-    /// </remarks>
+    /// Deserializes a JSON string to a <c>dynamic</c> object.
     /// </summary>
-    internal class DynamicJsonDeserializer : IDeserializer
+    internal class DynamicJsonDeserializer
     {
-        #region Properties
-        /// <summary>
-        /// Gets or sets the root element.
-        /// </summary>
-        public string RootElement { get; set; }
-
-        /// <summary>
-        /// Gets or sets the namespace.
-        /// </summary>
-        public string Namespace { get; set; }
-
-        /// <summary>
-        /// Gets or sets the date format.
-        /// </summary>
-        public string DateFormat { get; set; }
-        #endregion
-        
         #region Methods
         /// <summary>
-        /// Deserializes the specified response.
+        /// Deserializes <paramref name="content"/> to <typeparamref name="T"/>
+        /// (typically <c>dynamic</c>).
         /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <param name="response">The response.</param>
-        /// <returns></returns>
-        public T Deserialize<T>(IRestResponse response)
+        /// <typeparam name="T">The target type — use <c>dynamic</c> for schema-free access.</typeparam>
+        /// <param name="content">Raw JSON string to deserialize.</param>
+        public T Deserialize<T>(string content)
         {
-            return JsonConvert.DeserializeObject<dynamic>(response.Content);
+            return JsonConvert.DeserializeObject<dynamic>(content);
         }
         #endregion
     }

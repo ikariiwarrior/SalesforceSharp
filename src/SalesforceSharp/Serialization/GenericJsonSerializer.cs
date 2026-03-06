@@ -1,25 +1,27 @@
-﻿using Newtonsoft.Json;
-using RestSharp.Serializers;
+﻿﻿using Newtonsoft.Json;
 
 namespace SalesforceSharp.Serialization
 {
-    internal class GenericJsonSerializer : ISerializer
+    /// <summary>
+    /// Serializes an object to JSON using a <see cref="SalesforceContractResolver"/>
+    /// to apply Salesforce-specific field mapping and ignore rules.
+    /// </summary>
+    internal class GenericJsonSerializer
     {
-        private SalesforceContractResolver salesForceContractResolver;
+        private readonly SalesforceContractResolver salesForceContractResolver;
 
         public GenericJsonSerializer(SalesforceContractResolver salesForceContractResolver)
         {
             this.salesForceContractResolver = salesForceContractResolver;
         }
 
+        /// <summary>Serializes <paramref name="obj"/> to an indented JSON string.</summary>
         public string Serialize(object obj)
         {
-            return JsonConvert.SerializeObject(obj, Formatting.Indented, new JsonSerializerSettings(){ContractResolver = salesForceContractResolver});
+            return JsonConvert.SerializeObject(
+                obj,
+                Formatting.Indented,
+                new JsonSerializerSettings { ContractResolver = salesForceContractResolver });
         }
-
-        public string RootElement { get; set; }
-        public string Namespace { get; set; }
-        public string DateFormat { get; set; }
-        public string ContentType { get; set; }
     }
 }

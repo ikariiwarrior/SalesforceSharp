@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Net;
-using RestSharp;
+﻿﻿using System.Collections.Generic;
 
 namespace SalesforceSharp.Serialization
 {

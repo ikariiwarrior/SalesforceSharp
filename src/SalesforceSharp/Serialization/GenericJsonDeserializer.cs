@@ -1,53 +1,34 @@
-﻿using System;
+﻿﻿﻿﻿using System;
 using Newtonsoft.Json;
-using RestSharp;
-using RestSharp.Deserializers;
 
 namespace SalesforceSharp.Serialization
 {
     /// <summary>
-    /// Json Deserializar using dynamic.
-    /// <remarks>
-    /// Original source code from http://www.csharpcity.com/2013/deserializing-to-dynamic-with-restsharp/.
-    /// </remarks>
+    /// Deserializes a JSON string to a target type using a
+    /// <see cref="SalesforceContractResolver"/> to handle Salesforce-specific
+    /// field mapping and ignore rules.
     /// </summary>
-    internal class GenericJsonDeserializer : IDeserializer
+    internal class GenericJsonDeserializer
     {
-        #region Properties
-        /// <summary>
-        /// Gets or sets the root element.
-        /// </summary>
-        public string RootElement { get; set; }
-
-        /// <summary>
-        /// Gets or sets the namespace.
-        /// </summary>
-        public string Namespace { get; set; }
-
-        /// <summary>
-        /// Gets or sets the date format.
-        /// </summary>
-        public string DateFormat { get; set; }
-        #endregion
-
-        private SalesforceContractResolver salesForceContractResolver;
+        private readonly SalesforceContractResolver salesForceContractResolver;
 
         public GenericJsonDeserializer(SalesforceContractResolver salesForceContractResolver)
         {
-            if (salesForceContractResolver == null) throw new ArgumentNullException(nameof (salesForceContractResolver));
+            if (salesForceContractResolver == null) throw new ArgumentNullException(nameof(salesForceContractResolver));
             this.salesForceContractResolver = salesForceContractResolver;
         }
 
         #region Methods
         /// <summary>
-        /// Deserializes the specified response.
+        /// Deserializes <paramref name="content"/> to <typeparamref name="T"/>.
         /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <param name="response">The response.</param>
-        /// <returns></returns>
-        public T Deserialize<T>(IRestResponse response)
+        /// <typeparam name="T">The target deserialization type.</typeparam>
+        /// <param name="content">Raw JSON string to deserialize.</param>
+        public T Deserialize<T>(string content)
         {
-            return JsonConvert.DeserializeObject<T>(response.Content, new JsonSerializerSettings(){ContractResolver = salesForceContractResolver});
+            return JsonConvert.DeserializeObject<T>(
+                content,
+                new JsonSerializerSettings { ContractResolver = salesForceContractResolver });
         }
         #endregion
     }

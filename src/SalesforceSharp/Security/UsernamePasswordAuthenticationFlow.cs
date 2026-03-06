@@ -1,16 +1,17 @@
-﻿using System.Net;
-using HelperSharp;
-using RestSharp;
+﻿using System;
+using System.Collections.Generic;
+using System.Net;
+using SalesforceSharp.Common;
+using SalesforceSharp.Common.Http;
 using SalesforceSharp.Serialization;
-using System;
 
 namespace SalesforceSharp.Security
 {
     /// <summary>
-    /// The username-password authentication flow can be used to authenticate when the consumer already has the user’s credentials.
-    /// In this flow, the user’s credentials are used by the application to request an access token as shown in the following steps.
+    /// The username-password authentication flow can be used to authenticate when the consumer already has the user's credentials.
+    /// In this flow, the user's credentials are used by the application to request an access token as shown in the following steps.
     /// <remarks>
-    /// Warning: This OAuth authentication flow involves passing the user’s credentials back and forth. Use this
+    /// Warning: This OAuth authentication flow involves passing the user's credentials back and forth. Use this
     /// authentication flow only when necessary. No refresh token will be issued.
     /// 
     /// You should only use the password access grant type in situations such as an AUTONOMOUS CLIENT, where a user cannot be present 
@@ -24,11 +25,11 @@ namespace SalesforceSharp.Security
     public class UsernamePasswordAuthenticationFlow : IAuthenticationFlow
     {
         #region Fields
-        private IRestClient m_restClient;
-        private string m_clientId;
-        private string m_clientSecret;
-        private string m_username;
-        private string m_password;
+        private readonly ISalesforceHttpClient m_httpClient;
+        private readonly string m_clientId;
+        private readonly string m_clientSecret;
+        private readonly string m_username;
+        private readonly string m_password;
         #endregion
 
         #region Constructors
@@ -39,46 +40,46 @@ namespace SalesforceSharp.Security
         /// <param name="clientSecret">The client secret.</param>
         /// <param name="username">The username.</param>
         /// <param name="password">The password.</param>
-        public UsernamePasswordAuthenticationFlow(string clientId, string clientSecret, string username, string password) : 
-            this(new RestClient(), clientId, clientSecret, username, password)
-        {            
-        }
-        
-        /// <summary>
-        /// Initializes a new instance of the <see cref="UsernamePasswordAuthenticationFlow"/> class.
-        /// </summary>
-        /// <param name="clientId">The client id.</param>
-        /// <param name="clientSecret">The client secret.</param>
-        /// <param name="username">The username.</param>
-        /// <param name="password">The password.</param>
-        /// <param name="tokenRequestEndpointUrl">The token request endpoint url.</param>
-        public UsernamePasswordAuthenticationFlow(string clientId, string clientSecret, string username, string password, string tokenRequestEndpointUrl) : 
-            this(new RestClient(), clientId, clientSecret, username, password, tokenRequestEndpointUrl)
-        {            
+        public UsernamePasswordAuthenticationFlow(string clientId, string clientSecret, string username, string password) :
+            this(new SalesforceHttpClient(), clientId, clientSecret, username, password)
+        {
         }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="UsernamePasswordAuthenticationFlow"/> class.
         /// </summary>
-        /// <param name="restClient">The REST client which will be used.</param>
         /// <param name="clientId">The client id.</param>
         /// <param name="clientSecret">The client secret.</param>
         /// <param name="username">The username.</param>
         /// <param name="password">The password.</param>
         /// <param name="tokenRequestEndpointUrl">The token request endpoint url.</param>
-        internal UsernamePasswordAuthenticationFlow (IRestClient restClient, string clientId, string clientSecret, string username, string password, string tokenRequestEndpointUrl = "https://login.salesforce.com/services/oauth2/token")
+        public UsernamePasswordAuthenticationFlow(string clientId, string clientSecret, string username, string password, string tokenRequestEndpointUrl) :
+            this(new SalesforceHttpClient(), clientId, clientSecret, username, password, tokenRequestEndpointUrl)
         {
-            ExceptionHelper.ThrowIfNull("restClient", restClient);
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="UsernamePasswordAuthenticationFlow"/> class.
+        /// </summary>
+        /// <param name="httpClient">The HTTP client which will be used.</param>
+        /// <param name="clientId">The client id.</param>
+        /// <param name="clientSecret">The client secret.</param>
+        /// <param name="username">The username.</param>
+        /// <param name="password">The password.</param>
+        /// <param name="tokenRequestEndpointUrl">The token request endpoint url.</param>
+        internal UsernamePasswordAuthenticationFlow(ISalesforceHttpClient httpClient, string clientId, string clientSecret, string username, string password, string tokenRequestEndpointUrl = "https://login.salesforce.com/services/oauth2/token")
+        {
+            ExceptionHelper.ThrowIfNull("httpClient", httpClient);
             ExceptionHelper.ThrowIfNullOrEmpty("clientId", clientId);
             ExceptionHelper.ThrowIfNullOrEmpty("clientSecret", clientSecret);
             ExceptionHelper.ThrowIfNullOrEmpty("username", username);
             ExceptionHelper.ThrowIfNullOrEmpty("password", password);
 
-            m_restClient = restClient;
-            m_clientId = clientId;
-            m_clientSecret = clientSecret;
-            m_username = username;
-            m_password = password;
+            m_httpClient            = httpClient;
+            m_clientId              = clientId;
+            m_clientSecret          = clientSecret;
+            m_username              = username;
+            m_password              = password;
             TokenRequestEndpointUrl = tokenRequestEndpointUrl;
         }
         #endregion
@@ -89,7 +90,7 @@ namespace SalesforceSharp.Security
         /// </summary>
         /// <remarks>
         /// The default value is https://login.salesforce.com/services/oauth2/token.
-        /// For sandbox use "https://test.salesforce.com/services/oauth2/token.
+        /// For sandbox use "https://test.salesforce.com/services/oauth2/token".
         /// </remarks>
         public string TokenRequestEndpointUrl { get; set; }
         #endregion
@@ -99,46 +100,40 @@ namespace SalesforceSharp.Security
         /// Authenticate in the Salesforce REST's API.
         /// </summary>
         /// <returns>
-        /// The authentication info with access token and instance url for futher API calls.
+        /// The authentication info with access token and instance url for further API calls.
         /// </returns>
         /// <remarks>
-        /// If authentiaction fails an SalesforceException will be throw.
+        /// If authentication fails a <see cref="SalesforceException"/> will be thrown.
         /// </remarks>
         public AuthenticationInfo Authenticate()
         {
-            if (ServicePointManager.SecurityProtocol != 0)
+            var formFields = new List<KeyValuePair<string, string>>
             {
-                ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
-            }
-            Uri uri = new Uri(TokenRequestEndpointUrl);
-            m_restClient.BaseUrl = uri;
-
-            var request = new RestRequest (Method.POST) {
-                RequestFormat = DataFormat.Json
+                new KeyValuePair<string, string>("grant_type",    "password"),
+                new KeyValuePair<string, string>("client_id",     m_clientId),
+                new KeyValuePair<string, string>("client_secret", m_clientSecret),
+                new KeyValuePair<string, string>("username",      m_username),
+                new KeyValuePair<string, string>("password",      m_password)
             };
-            request.AddParameter("grant_type", "password");
-            request.AddParameter("client_id", m_clientId);
-            request.AddParameter("client_secret", m_clientSecret);
-            request.AddParameter("username", m_username);
-            request.AddParameter("password", m_password);
 
-            var response = m_restClient.Post(request);
+            var response        = m_httpClient.PostForm(TokenRequestEndpointUrl, formFields);
             var isAuthenticated = response.StatusCode == HttpStatusCode.OK;
 
-            var deserializer = new GenericJsonDeserializer (new SalesforceContractResolver (false));
-            var responseData = deserializer.Deserialize<dynamic>(response);
+            var deserializer = new GenericJsonDeserializer(new SalesforceContractResolver(false));
+            var responseData = deserializer.Deserialize<dynamic>(response.Content);
 
             if (responseData == null)
-                throw new SalesforceException(response.ErrorException.Message, response.ErrorMessage);
+            {
+                var transportError = response.ErrorException?.Message ?? "Unknown transport error.";
+                throw new SalesforceException(transportError, transportError);
+            }
 
             if (isAuthenticated)
             {
                 return new AuthenticationInfo(responseData.access_token.Value, responseData.instance_url.Value);
             }
-            else
-            {
-                throw new SalesforceException(responseData.error.Value, responseData.error_description.Value);
-            }            
+
+            throw new SalesforceException(responseData.error.Value, responseData.error_description.Value);
         }
         #endregion
     }
